@@ -1,3 +1,4 @@
+#include <linux/sched.h>
 #include<linux/module.h>
 #include<linux/version.h>
 #include<linux/kernel.h>
@@ -7,6 +8,7 @@
 
 extern unsigned long volatile __jiffy_data jiffies;
  
+struct rq;
 //static unsigned int counter = 0;
 
 
@@ -35,7 +37,7 @@ static void jttwu_queue_remote(struct task_struct *p, int cpu)
 	jprobe_return();
 }
 
-static void jttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags)
+static void jttwu_do_activate(struct rq *rqa, struct task_struct *p, int wake_flags)
 {
 	if(strcmp(p->comm, "cyclictest") == 0){
 		printk(KERN_INFO "%lu :ttwu_do_activate : %s\n", jiffies, p->comm);
@@ -52,7 +54,7 @@ void jwq_worker_waking_up(struct task_struct *task, int cpu)
 }
 
 
-void jactivate_task(struct rq *rq, struct task_struct *p, int flags)
+void jactivate_task(struct rq * rqa, struct task_struct *p, int flags)
 {
 	if(strcmp(p->comm, "cyclictest") == 0){
 		printk(KERN_INFO "%lu : activate_task, curr : %s\n", jiffies, p->comm);
@@ -291,6 +293,12 @@ struct jprobe jp13 = {
 		},
 	};
 
+static void checkRegStatus(int ret, const char * name){
+	if(ret < 0){
+		printk(KERN_ALERT "%s register_jprobe failed, returned %d\n", name, ret);
+	}
+}
+
 int __init jprobe_init(void)
 {
 	int ret = 0;
@@ -298,34 +306,62 @@ int __init jprobe_init(void)
 	printk(KERN_ALERT "module inserted\n ");
 
 	ret = register_jprobe(&jp0);
+	checkRegStatus(ret, jp0.kp.symbol_name);
+
 	ret = register_jprobe(&jp0_1);
+	checkRegStatus(ret, jp0_1.kp.symbol_name);
+
 	ret = register_jprobe(&jp0_2);
+	checkRegStatus(ret, jp0_2.kp.symbol_name);
+
 	ret = register_jprobe(&jp1);
+	checkRegStatus(ret, jp1.kp.symbol_name);
+
 	ret = register_jprobe(&jp2);
+	checkRegStatus(ret, jp2.kp.symbol_name);
+
 	ret = register_jprobe(&jp3);
+	checkRegStatus(ret, jp3.kp.symbol_name);
+
     	ret = register_jprobe(&jp4);
+	checkRegStatus(ret, jp4.kp.symbol_name);
+
     	ret = register_jprobe(&jp5);
+	checkRegStatus(ret, jp5.kp.symbol_name);
+
     	ret = register_jprobe(&jp6);
+	checkRegStatus(ret, jp6.kp.symbol_name);
+
     	ret = register_jprobe(&jp7);
+	checkRegStatus(ret, jp7.kp.symbol_name);
+
     	ret = register_jprobe(&jp8);
+	checkRegStatus(ret, jp8.kp.symbol_name);
+
     	ret = register_jprobe(&jp9);
+	checkRegStatus(ret, jp9.kp.symbol_name);
+
     	ret = register_jprobe(&jp10);
+	checkRegStatus(ret, jp10.kp.symbol_name);
+
 	ret = register_jprobe(&jp11);
+	checkRegStatus(ret, jp11.kp.symbol_name);
+
     	ret = register_jprobe(&jp12);
+	checkRegStatus(ret, jp12.kp.symbol_name);
+
     	ret = register_jprobe(&jp13);
+	checkRegStatus(ret, jp13.kp.symbol_name);
     	
-	if(ret < 0){
-		printk(KERN_ALERT "register_jprobe failed, returned %d\n", ret);
-		return -1;
-	}
+	
     return 0;
 }
  
 static void __exit jprobe_exit(void)
 {
 	unregister_jprobe(&jp0);
-  unregister_jprobe(&jp0_1);
-  unregister_jprobe(&jp0_2);
+	unregister_jprobe(&jp0_1);
+	unregister_jprobe(&jp0_2);
 	unregister_jprobe(&jp1);
 	unregister_jprobe(&jp2);
 	unregister_jprobe(&jp3);
