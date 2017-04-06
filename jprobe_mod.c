@@ -5,145 +5,33 @@
 #include<linux/init.h>
 #include<linux/kprobes.h>
 #include<linux/jiffies.h>
+#include<linux/time.h>
+#include <linux/preempt_mask.h>
 
-extern unsigned long volatile __jiffy_data jiffies;
+#define debug 
  
 struct rq;
-//static unsigned int counter = 0;
+struct softirq_action;
 
-
-static int jtry_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
-{
-	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu :jtry_to_wake_up, task : %s\n", jiffies, p->comm);
-	}
-	jprobe_return();
-	return 0;
-}
-
-static void jttwu_queue(struct task_struct *p, int cpu)
-{
-     if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu :ttwu_queue : %s\n", jiffies, p->comm);
-	}
-	jprobe_return();
-}
-
-static void jttwu_queue_remote(struct task_struct *p, int cpu)
-{
-	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu :ttwu_queue_remote : %s\n", jiffies, p->comm);
-	}
-	jprobe_return();
-}
-
-static void jttwu_do_activate(struct rq *rqa, struct task_struct *p, int wake_flags)
-{
-	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu :ttwu_do_activate : %s\n", jiffies, p->comm);
-	}
-	jprobe_return();
-}
-
-void jwq_worker_waking_up(struct task_struct *task, int cpu)
-{
-	if(strcmp(task->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu :jwq_worker_waking_up : %s\n", jiffies, task->comm);
-	}
-	jprobe_return();
-}
-
-
-void jactivate_task(struct rq * rqa, struct task_struct *p, int flags)
-{
-	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : activate_task, curr : %s\n", jiffies, p->comm);
-	}
-
-	jprobe_return();
-
-}
-
-static void jenqueue_task(struct rq *rq, struct task_struct *p, int flags)
-{
-	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : enqueue, curr : %s\n", jiffies, p->comm);
-	}
-
-	jprobe_return();
-}
-
-static void jcheck_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
-{
-	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu :jcheck_preempt_wakeup, task Name %s\n", jiffies, p->comm);
-	}
-	jprobe_return();	
-}
-
-void jresched_task(struct task_struct *p)
-{
-	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu :jresched_task, task Name %s\n", jiffies, p->comm);
-	}
-	jprobe_return();
-}
-
-void jupdate_process_times(int user_tick)
-{
-	if(strcmp(current->comm, "cyclictest") == 0){
-//		printk(KERN_ALERT "%lu : update_process_times %d \n ", jiffies, user_tick);
-	}
-	jprobe_return();
-}
-
-void jupdate_wall_time(void)
-{
-	//printk(KERN_ALERT "%lu : update_wall_time\n ", jiffies);
-	jprobe_return();
-}
-
-long jhrtimer_nanosleep(struct timespec *rqtp, struct timespec __user *rmtp,
-                       const enum hrtimer_mode mode, const clockid_t clockid)
-{
-	if(strcmp(current->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : hrtimer_nanosleep, task Name %s\n", jiffies, current->comm);
-	}
-	jprobe_return();
-	return 0;
-}
-
-
-static void __sched j__schedule(void)
-{
-	
-	if(strcmp(current->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : __schedule , curr : %s\n", jiffies, current->comm);
-	}	
-	jprobe_return();
-}
-
-
-static void jfinish_task_switch(struct rq *rq, struct task_struct *prev)
-        __releases(rq->lock)
-{
-	if(strcmp(prev->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : jfinish_task_switch, prev : %s , curr : %s\n", jiffies, prev->comm, current->comm);
-	}
-
-
-	if(strcmp(current->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : jfinish_task_switch, prev : %s , curr : %s\n", jiffies, prev->comm, current->comm);
-	}
-
-	jprobe_return();
-
-}	
+int sleeping = 1;
+long long start_time_stamp = 0;
+long unsigned int loop_count;
+int enqueued = 0;
+long long unsigned int 	hrtimer_interrupt_ts, 	hrtimer_interrupt_delay,hrtimer_interrupt_avg,
+			try_to_wake_up_delay, 	try_to_wake_up_ts, 	try_to_wake_up_avg, 
+			activate_task_ts, 	activate_task_delay, 	activate_task_avg,
+			enqueue_task_ts, 	enqueue_task_delay, 	enqueue_task_avg,
+			check_preempt_wakeup_ts,check_preempt_wakeup_delay,check_preempt_wakeup_avg,
+			finish_task_switch_ts;
+			
 
 static int __sched jdo_nanosleep(struct hrtimer_sleeper *t, enum hrtimer_mode mode)
 {
 	if(strcmp(current->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : jdo_nanosleep, curr : %s\n", jiffies, current->comm);
+		sleeping = 1;
+		#ifdef debug
+			printk(KERN_INFO "%llu : jdo_nanosleep, curr : %s\n", local_clock(), current->comm);
+		#endif
 	}
 
 	jprobe_return();
@@ -152,67 +40,149 @@ static int __sched jdo_nanosleep(struct hrtimer_sleeper *t, enum hrtimer_mode mo
 
 void jhrtimer_interrupt(struct clock_event_device *dev)
 {
-//	printk(KERN_INFO "%lu : jhrtimer_interrupt\n", jiffies);
+	hrtimer_interrupt_ts = local_clock();
 	jprobe_return();
 }
 
+static int jtry_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
+{
+	if(strncmp(p->comm, "cyclictest",10) == 0){
+		if (in_irq())
+		{
+			sleeping = 0;
+			start_time_stamp = hrtimer_interrupt_ts;
+			try_to_wake_up_ts = local_clock();
+			hrtimer_interrupt_delay = try_to_wake_up_ts - hrtimer_interrupt_ts;
+			hrtimer_interrupt_avg += hrtimer_interrupt_delay;
+			#ifdef debug
+				printk(KERN_INFO "%llu : hrtimer_interrupt -> jtry_to_wake_up\n", hrtimer_interrupt_delay);
+			#endif
+		}
+	}
+	jprobe_return();
+	return 0;
+}
 
-
-void jdeactivate_task(struct rq *rq, struct task_struct *p, int flags)
+void jactivate_task(struct rq * rqa, struct task_struct *p, int flags)
 {
 	if(strcmp(p->comm, "cyclictest") == 0){
-		printk(KERN_INFO "%lu : deactivate_task, curr : %s\n", jiffies, p->comm);
+		if(sleeping == 0)
+		{
+			activate_task_ts = local_clock();
+			try_to_wake_up_delay = activate_task_ts - try_to_wake_up_ts ;
+			try_to_wake_up_avg += try_to_wake_up_delay;
+			#ifdef debug
+				printk(KERN_INFO "%llu : try_to_wake_up -> activate_task\n", try_to_wake_up_delay);
+			#endif
+		}	
 	}
 
 	jprobe_return();
-} 
+
+}
 
 
-/*
-// crashes
-void jdo_irq(int vec, struct pt_regs *fp)
+static void jenqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
-	printk(KERN_INFO "%lu : do_irq\n", jiffies);
+	if(strcmp(p->comm, "cyclictest") == 0){
+
+		if(sleeping == 0)
+		{
+			enqueue_task_ts = local_clock();
+			activate_task_delay = enqueue_task_ts - activate_task_ts ;
+			activate_task_avg += activate_task_delay;
+			enqueued++;
+			#ifdef debug
+				printk(KERN_INFO "%llu : activate_task -> enqueue_task \n", activate_task_delay);
+			#endif
+		}
+	}
 	jprobe_return();
 }
+
+/*
+static void jcheck_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
+{
+	if(strcmp(p->comm, "cyclictest") == 0){
+		if (enqueued > 0){	
+			check_preempt_wakeup_ts = local_clock();
+			enqueue_task_delay = check_preempt_wakeup_ts - enqueue_task_ts;
+			enqueue_task_avg += enqueue_task_delay;
+			loop_count++;
+			enqueued--;
+			#ifdef debug
+				printk(KERN_INFO "%llu :enqueue_task -> jcheck_preempt_wakeup\n", enqueue_task_delay);
+			#endif
+		}
+	}
+	jprobe_return();	
+}
 */
- 
+
+static void jfinish_task_switch(struct rq *rq, struct task_struct *prev) 
+		__releases(rq->lock)
+{
+	if(strcmp(current->comm, "cyclictest") == 0){
+		if(sleeping == 0){
+			finish_task_switch_ts = local_clock();
+			enqueue_task_delay = finish_task_switch_ts - enqueue_task_ts;
+			enqueue_task_avg += enqueue_task_delay;
+			#ifdef debug			
+				printk(KERN_INFO "%llu : enqueue -> jfinish_task_switch\n", enqueue_task_delay);
+			#endif
+			loop_count++;
+		}
+	}
+
+	jprobe_return();
+
+}	
+/*
+
+static void jrun_timer_softirq(struct softirq_action *h)
+{
+	if(sleeping == 0)
+	{
+		//run_timer_softirq_ts = local_clock(); 
+	}
+	jprobe_return();
+}
+
+static void jcall_timer_fn(struct timer_list *timer, void (*fn)(unsigned long),
+                          unsigned long data)
+{
+	if(sleeping == 0)
+	{
+		//call_timer_fn_ts = local_clock(); 		
+		//printk(KERN_INFO "%llu : call_timer_fn\n",call_timer_fn_ts);
+	}
+	jprobe_return();
+} 
+
+*/
 
 struct jprobe jp0 = {
+		.entry = jdo_nanosleep,
+		.kp = {
+		    .symbol_name = "do_nanosleep",
+		},
+	};
+
+struct jprobe jp1 = {
+		.entry = jhrtimer_interrupt,
+		.kp = {
+		    .symbol_name = "hrtimer_interrupt",
+		},
+	};
+
+
+struct jprobe jp2 = {
 		.entry = jtry_to_wake_up,
 		.kp = {
 		    .symbol_name = "try_to_wake_up",
 		},
 	};
  
-struct jprobe jp0_1 = {
-		.entry = jttwu_queue,
-		.kp = {
-		    .symbol_name = "ttwu_queue",
-		},
-	};
-
-struct jprobe jp0_2 = {
-		.entry = jttwu_queue_remote,
-		.kp = {
-		    .symbol_name = "ttwu_queue_remote",
-		},
-	};
-
-struct jprobe jp1 = {
-		.entry = jttwu_do_activate,
-		.kp = {
-		    .symbol_name = "ttwu_do_activate",
-		},
-	};
-
-struct jprobe jp2 = {
-		.entry = jwq_worker_waking_up,
-		.kp = {
-		    .symbol_name = "wq_worker_waking_up",
-		},
-	};
-
 struct jprobe jp3 = {
 		.entry = jactivate_task,
 		.kp = {
@@ -227,71 +197,21 @@ struct jprobe jp4 = {
 		},
 	};
 
-
+/*
 struct jprobe jp5 = {
 		.entry = jcheck_preempt_wakeup,
 		.kp = {
 		    .symbol_name = "check_preempt_wakeup",
 		},
 	};
-
-struct jprobe jp6 = {
-		.entry = jresched_task,
-		.kp = {
-		    .symbol_name = "resched_task",
-		},
-	};
-
-struct jprobe jp7 = {
-		.entry = jupdate_process_times,
-		.kp = {
-		    .symbol_name = "update_process_times",
-		},
-	};
-
-struct jprobe jp8 = {
-		.entry = jhrtimer_nanosleep,
-		.kp = {
-		    .symbol_name = "hrtimer_nanosleep",
-		},
-	};
-
-struct jprobe jp9 = {
-		.entry = j__schedule,
-		.kp = {
-		    .symbol_name = "__schedule",
-		},
-	};
-
-
-struct jprobe jp10 = {
+*/
+struct jprobe jp5 = {
 		.entry = jfinish_task_switch,
 		.kp = {
 		    .symbol_name = "finish_task_switch",
 		},
 	};
 
-
-struct jprobe jp11 = {
-		.entry = jdo_nanosleep,
-		.kp = {
-		    .symbol_name = "do_nanosleep",
-		},
-	};
-
-struct jprobe jp12 = {
-		.entry = jhrtimer_interrupt,
-		.kp = {
-		    .symbol_name = "hrtimer_interrupt",
-		},
-	};
-
-struct jprobe jp13 = {
-		.entry = jdeactivate_task,
-		.kp = {
-		    .symbol_name = "deactivate_task",
-		},
-	};
 
 static void checkRegStatus(int ret, const char * name){
 	if(ret < 0){
@@ -308,12 +228,6 @@ int __init jprobe_init(void)
 	ret = register_jprobe(&jp0);
 	checkRegStatus(ret, jp0.kp.symbol_name);
 
-	ret = register_jprobe(&jp0_1);
-	checkRegStatus(ret, jp0_1.kp.symbol_name);
-
-	ret = register_jprobe(&jp0_2);
-	checkRegStatus(ret, jp0_2.kp.symbol_name);
-
 	ret = register_jprobe(&jp1);
 	checkRegStatus(ret, jp1.kp.symbol_name);
 
@@ -329,55 +243,21 @@ int __init jprobe_init(void)
     	ret = register_jprobe(&jp5);
 	checkRegStatus(ret, jp5.kp.symbol_name);
 
-    	ret = register_jprobe(&jp6);
-	checkRegStatus(ret, jp6.kp.symbol_name);
 
-    	ret = register_jprobe(&jp7);
-	checkRegStatus(ret, jp7.kp.symbol_name);
-
-    	ret = register_jprobe(&jp8);
-	checkRegStatus(ret, jp8.kp.symbol_name);
-
-    	ret = register_jprobe(&jp9);
-	checkRegStatus(ret, jp9.kp.symbol_name);
-
-    	ret = register_jprobe(&jp10);
-	checkRegStatus(ret, jp10.kp.symbol_name);
-
-	ret = register_jprobe(&jp11);
-	checkRegStatus(ret, jp11.kp.symbol_name);
-
-    	ret = register_jprobe(&jp12);
-	checkRegStatus(ret, jp12.kp.symbol_name);
-
-    	ret = register_jprobe(&jp13);
-	checkRegStatus(ret, jp13.kp.symbol_name);
-    	
-	
     return 0;
 }
  
 static void __exit jprobe_exit(void)
 {
 	unregister_jprobe(&jp0);
-	unregister_jprobe(&jp0_1);
-	unregister_jprobe(&jp0_2);
 	unregister_jprobe(&jp1);
 	unregister_jprobe(&jp2);
 	unregister_jprobe(&jp3);
 	unregister_jprobe(&jp4);
 	unregister_jprobe(&jp5);
-	unregister_jprobe(&jp6);
-	unregister_jprobe(&jp7);
-	unregister_jprobe(&jp8);
-	unregister_jprobe(&jp9);
-	unregister_jprobe(&jp10);
-	unregister_jprobe(&jp11);
-	unregister_jprobe(&jp12);
-	unregister_jprobe(&jp13);
+	printk(KERN_INFO "\nhrtimer_interrupt_avg %llu: \ntry_to_wake_up_avg: %llu \nactivate_task_avg : %llu \nenqueue_task_avg : %llu \n,loop_count : %lu\n", hrtimer_interrupt_avg / loop_count, try_to_wake_up_avg / loop_count, activate_task_avg / loop_count, enqueue_task_avg / loop_count, loop_count);
 
-//	printk(KERN_ALERT "jprobe at %p unregistered\n", jp.kp.addr);
-//	printk(KERN_ALERT "jprobe at %p unregistered\n", jp1.kp.addr);
+	
 }
  
 module_init(jprobe_init)
