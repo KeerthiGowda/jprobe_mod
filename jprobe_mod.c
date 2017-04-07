@@ -8,12 +8,12 @@
 #include<linux/time.h>
 #include <linux/preempt_mask.h>
 
-#define debug 
+//#define debug	
  
 struct rq;
 struct softirq_action;
 
-int sleeping = 1;
+int from_sleep = 0;
 long long start_time_stamp = 0;
 long unsigned int loop_count;
 int enqueued = 0;
@@ -28,7 +28,7 @@ long long unsigned int 	hrtimer_interrupt_ts, 	hrtimer_interrupt_delay,hrtimer_i
 static int __sched jdo_nanosleep(struct hrtimer_sleeper *t, enum hrtimer_mode mode)
 {
 	if(strcmp(current->comm, "cyclictest") == 0){
-		sleeping = 1;
+		from_sleep = 0;
 		#ifdef debug
 			printk(KERN_INFO "%llu : jdo_nanosleep, curr : %s\n", local_clock(), current->comm);
 		#endif
@@ -49,7 +49,7 @@ static int jtry_to_wake_up(struct task_struct *p, unsigned int state, int wake_f
 	if(strncmp(p->comm, "cyclictest",10) == 0){
 		if (in_irq())
 		{
-			sleeping = 0;
+			from_sleep = 1;
 			start_time_stamp = hrtimer_interrupt_ts;
 			try_to_wake_up_ts = local_clock();
 			hrtimer_interrupt_delay = try_to_wake_up_ts - hrtimer_interrupt_ts;
@@ -66,7 +66,7 @@ static int jtry_to_wake_up(struct task_struct *p, unsigned int state, int wake_f
 void jactivate_task(struct rq * rqa, struct task_struct *p, int flags)
 {
 	if(strcmp(p->comm, "cyclictest") == 0){
-		if(sleeping == 0)
+		if(from_sleep == 1)
 		{
 			activate_task_ts = local_clock();
 			try_to_wake_up_delay = activate_task_ts - try_to_wake_up_ts ;
@@ -86,7 +86,7 @@ static void jenqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if(strcmp(p->comm, "cyclictest") == 0){
 
-		if(sleeping == 0)
+		if(from_sleep == 1)
 		{
 			enqueue_task_ts = local_clock();
 			activate_task_delay = enqueue_task_ts - activate_task_ts ;
@@ -123,7 +123,7 @@ static void jfinish_task_switch(struct rq *rq, struct task_struct *prev)
 		__releases(rq->lock)
 {
 	if(strcmp(current->comm, "cyclictest") == 0){
-		if(sleeping == 0){
+		if(from_sleep == 1){
 			finish_task_switch_ts = local_clock();
 			enqueue_task_delay = finish_task_switch_ts - enqueue_task_ts;
 			enqueue_task_avg += enqueue_task_delay;
@@ -249,14 +249,21 @@ int __init jprobe_init(void)
  
 static void __exit jprobe_exit(void)
 {
+	unsigned long long total = 0;
 	unregister_jprobe(&jp0);
 	unregister_jprobe(&jp1);
 	unregister_jprobe(&jp2);
 	unregister_jprobe(&jp3);
 	unregister_jprobe(&jp4);
 	unregister_jprobe(&jp5);
-	printk(KERN_INFO "\nhrtimer_interrupt_avg %llu: \ntry_to_wake_up_avg: %llu \nactivate_task_avg : %llu \nenqueue_task_avg : %llu \n,loop_count : %lu\n", hrtimer_interrupt_avg / loop_count, try_to_wake_up_avg / loop_count, activate_task_avg / loop_count, enqueue_task_avg / loop_count, loop_count);
-
+	if(loop_count != 0){
+		hrtimer_interrupt_avg /= loop_count;
+		try_to_wake_up_avg /= loop_count;
+		activate_task_avg /= loop_count;
+		enqueue_task_avg /= loop_count;
+		total = hrtimer_interrupt_avg + try_to_wake_up_avg + activate_task_avg + enqueue_task_avg;
+		printk(KERN_INFO "\nhrtimer_interrupt -> try_to_wake_up:	%llu \ntry_to_wake_up -> ctivate_task: 	%llu\nactivate_task -> enqueue_task:		%llu \nenqueue_task -> finish_task_switch:	%llu \nTotal delay:	%llu\n", hrtimer_interrupt_avg , try_to_wake_up_avg , activate_task_avg , enqueue_task_avg , total);
+	}
 	
 }
  
